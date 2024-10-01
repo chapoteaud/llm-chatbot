@@ -1,50 +1,44 @@
 import { z } from 'zod';
 import { publicProcedure, router } from '../trpc';
-import { llmConfigs, LLMConfig } from '../../config/llmConfig';
+import { callOpenAI, callAnthropic, callCohere } from '../llm-providers';
+
+const LLM_PROVIDERS = ['GPT-3.5', 'GPT-4', 'Claude', 'Cohere'] as const;
 
 export const llmRouter = router({
-  getConfigs: publicProcedure.query(() => {
-    return llmConfigs.map(config => ({ name: config.name }));
+  getProviders: publicProcedure.query(() => {
+    return LLM_PROVIDERS;
   }),
   
   chat: publicProcedure
     .input(z.object({
-      llmName: z.string(),
+      provider: z.enum(LLM_PROVIDERS),
       message: z.string(),
     }))
     .mutation(async ({ input }) => {
-      const config = llmConfigs.find(c => c.name === input.llmName);
-      if (!config) {
-        throw new Error('LLM configuration not found');
+      const { provider, message } = input;
+
+      try {
+        let content: string;
+        switch (provider) {
+          case 'GPT-3.5':
+            content = await callOpenAI(message, 'gpt-3.5-turbo');
+            break;
+          case 'GPT-4':
+            content = await callOpenAI(message, 'gpt-4');
+            break;
+          case 'Claude':
+            content = await callAnthropic(message);
+            break;
+          case 'Cohere':
+            content = await callCohere(message);
+            break;
+          default:
+            throw new Error(`Unsupported provider: ${provider}`);
+        }
+        return { content };
+      } catch (error) {
+        console.error(`Error calling ${provider}:`, error);
+        throw new Error(`Failed to get response from ${provider}`);
       }
-
-      const apiKey = process.env[config.apiKeyName];
-      if (!apiKey) {
-        throw new Error('API key not found');
-      }
-
-      const body = {
-        ...config.endpointTemplate,
-        messages: [
-          ...config.endpointTemplate.messages,
-          { role: "user", content: input.message }
-        ]
-      };
-
-      const response = await fetch(config.endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
-        },
-        body: JSON.stringify(body)
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to get response from LLM');
-      }
-
-      const data = await response.json();
-      return data.choices[0].message.content;
-    })
+    }),
 });

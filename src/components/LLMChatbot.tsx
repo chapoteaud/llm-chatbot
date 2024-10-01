@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { trpc } from '../utils/trpc';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -10,11 +11,18 @@ import { Textarea } from "@/components/ui/textarea"
 import { Separator } from "@/components/ui/separator"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Paperclip } from 'lucide-react'
-import { trpc } from '../utils/trpc';
 
 type Message = {
   role: 'user' | 'assistant';
   content: string;
+};
+
+const facebookBlueStyle = {
+  backgroundColor: '#1877F2',
+  color: 'white',
+  ':hover': {
+    backgroundColor: '#1664D9', // A slightly darker shade for hover state
+  }
 };
 
 const LLMChatbot: React.FC = () => {
@@ -28,7 +36,7 @@ const LLMChatbot: React.FC = () => {
   const [documentContent, setDocumentContent] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const llmConfigs = trpc.llm.getConfigs.useQuery();
+  const llmProviders = trpc.llm.getProviders.useQuery();
   const chatMutation = trpc.llm.chat.useMutation();
 
   const handleSendMessage = async () => {
@@ -37,11 +45,11 @@ const LLMChatbot: React.FC = () => {
       
       try {
         const response = await chatMutation.mutateAsync({
-          llmName: selectedLLM,
+          provider: selectedLLM as any, // TODO: Improve type safety
           message: inputMessage,
         });
         
-        setMessages(prev => [...prev, { role: 'assistant', content: response }]);
+        setMessages(prev => [...prev, { role: 'assistant', content: response.content }]);
       } catch (error) {
         console.error('Failed to get response:', error);
         setMessages(prev => [...prev, { role: 'assistant', content: 'Sorry, I encountered an error.' }]);
@@ -120,13 +128,13 @@ const LLMChatbot: React.FC = () => {
           <CardContent className="flex flex-col h-full">
             <div className="mb-4">
               <Label htmlFor="llm-select" className="mb-2 block">Select LLM</Label>
-              <Select onValueChange={(value) => setSelectedLLM(value)}>
+              <Select onValueChange={setSelectedLLM}>
                 <SelectTrigger id="llm-select">
                   <SelectValue placeholder="Select LLM" />
                 </SelectTrigger>
                 <SelectContent>
-                  {llmConfigs.data?.map(config => (
-                    <SelectItem key={config.name} value={config.name}>{config.name}</SelectItem>
+                  {llmProviders.data?.map(provider => (
+                    <SelectItem key={provider} value={provider}>{provider}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -145,9 +153,9 @@ const LLMChatbot: React.FC = () => {
                   onChange={(e) => setUrl(e.target.value)}
                   className="flex-grow mr-2"
                 />
-                <Button onClick={handleSetUrl}>Set</Button>
+                <Button onClick={handleSetUrl} size="sm" style={facebookBlueStyle}>Set</Button>
               </div>
-              <Button onClick={handleTestConnection} className="w-full">Test Connection</Button>
+              <Button onClick={handleTestConnection} size="sm" style={facebookBlueStyle} className="w-full">Test Connection</Button>
             </div>
             <div className="mb-4 flex-grow">
               <Label htmlFor="json-template" className="mb-2 block">JSON Endpoint Template</Label>
@@ -158,7 +166,7 @@ const LLMChatbot: React.FC = () => {
                 onChange={(e) => setJsonTemplate(e.target.value)}
                 className="min-h-[200px] mb-2"
               />
-              <Button onClick={handleSetJsonTemplate} className="w-full">Set JSON Template</Button>
+              <Button onClick={handleSetJsonTemplate} size="sm" style={facebookBlueStyle} className="w-full">Set JSON Template</Button>
             </div>
           </CardContent>
         </Card>
@@ -176,7 +184,10 @@ const LLMChatbot: React.FC = () => {
       <div className="w-3/4 p-4 flex flex-col">
         <Card className="flex-grow flex flex-col">
           <CardHeader>
-            <CardTitle>Chat with {selectedLLM} {firewallEnabled && '(Firewall Enabled)'}</CardTitle>
+            <CardTitle>
+              Chat with {selectedLLM || 'No LLM selected'} 
+              {firewallEnabled && ' (Firewall Enabled)'}
+            </CardTitle>
           </CardHeader>
           <CardContent className="flex-grow overflow-hidden">
             <ScrollArea className="h-full">
@@ -224,7 +235,7 @@ const LLMChatbot: React.FC = () => {
                   className="hidden"
                 />
               </div>
-              <Button onClick={handleSendMessage} className="rounded-l-none">Send</Button>
+              <Button onClick={handleSendMessage} style={facebookBlueStyle} className="rounded-l-none">Send</Button>
             </div>
           </CardFooter>
         </Card>
